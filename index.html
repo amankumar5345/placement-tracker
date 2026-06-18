@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>build log — genai &amp; sql placement tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#14171c;
+    --bg-raised:#1b1f26;
+    --bg-input:#101317;
+    --line:#2a2e35;
+    --line-soft:#22262d;
+    --text:#e8e6df;
+    --text-dim:#9a9da4;
+    --text-faint:#5d6068;
+    --accent:#ff6b35;
+    --accent-dim:#ff6b3526;
+    --done:#6b9080;
+    --done-dim:#6b908022;
+    --doubt:#e0b04c;
+    --doubt-dim:#e0b04c1f;
+    --mono:'JetBrains Mono', monospace;
+    --sans:'Inter', sans-serif;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  ::selection{background:var(--accent-dim);}
+
+  /* focus visibility */
+  button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:2px;
+  }
+
+  /* ===== layout shell ===== */
+  .shell{
+    display:grid;
+    grid-template-columns:280px 1fr;
+    min-height:100vh;
+  }
+  @media (max-width:880px){
+    .shell{grid-template-columns:1fr;}
+    .rail{position:relative;border-right:none;border-bottom:1px solid var(--line);}
+  }
+
+  /* ===== left rail / signature ledger ===== */
+  .rail{
+    background:var(--bg-raised);
+    border-right:1px solid var(--line);
+    padding:28px 22px;
+    position:sticky;
+    top:0;
+    height:100vh;
+    overflow-y:auto;
+  }
+  @media (max-width:880px){ .rail{position:static;height:auto;} }
+
+  .rail-brand{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.08em;
+    color:var(--text-faint);
+    text-transform:uppercase;
+    margin-bottom:4px;
+  }
+  .rail-title{
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:15px;
+    color:var(--text);
+    margin-bottom:22px;
+  }
+
+  .ledger{
+    font-family:var(--mono);
+    background:var(--bg-input);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px 14px;
+    margin-bottom:22px;
+  }
+  .ledger-row{display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);margin-bottom:8px;}
+  .ledger-row span:last-child{color:var(--text);}
+  .ledger-bar-track{
+    height:8px;
+    background:var(--line);
+    border-radius:4px;
+    overflow:hidden;
+    margin:10px 0 6px;
+  }
+  .ledger-bar-fill{
+    height:100%;
+    background:linear-gradient(90deg, var(--accent), #ffa05c);
+    border-radius:4px;
+    width:0%;
+    transition:width .4s ease;
+  }
+  .ledger-pct{font-size:20px;font-weight:700;color:var(--accent);}
+  .ledger-sub{font-size:11px;color:var(--text-faint);}
+
+  .nav-section-title{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    margin:18px 0 8px;
+  }
+  .nav-list{display:flex;flex-direction:column;gap:2px;}
+  .nav-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding:7px 10px;
+    border-radius:7px;
+    font-size:13px;
+    color:var(--text-dim);
+    cursor:pointer;
+    border:1px solid transparent;
+    background:none;
+    width:100%;
+    text-align:left;
+    font-family:var(--sans);
+  }
+  .nav-item:hover{background:var(--line-soft);color:var(--text);}
+  .nav-item.active{background:var(--accent-dim);color:var(--accent);border-color:#ff6b3540;}
+  .nav-item .nc{
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--text-faint);
+    background:var(--bg-input);
+    border-radius:10px;
+    padding:1px 6px;
+    flex-shrink:0;
+  }
+  .nav-item.active .nc{color:var(--accent);}
+
+  .rail-foot{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);}
+  .reset-btn{
+    width:100%;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-faint);
+    background:none;
+    border:1px solid var(--line);
+    border-radius:7px;
+    padding:8px;
+    cursor:pointer;
+  }
+  .reset-btn:hover{color:var(--doubt);border-color:var(--doubt);}
+
+  /* ===== main ===== */
+  .main{padding:36px 40px 80px;max-width:880px;}
+  @media (max-width:880px){.main{padding:24px 18px 60px;}}
+
+  .page-head{margin-bottom:28px;}
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    margin-bottom:8px;
+  }
+  .page-head h1{
+    font-family:var(--mono);
+    font-size:26px;
+    font-weight:600;
+    margin:0 0 10px;
+    color:var(--text);
+  }
+  .page-head p{
+    color:var(--text-dim);
+    font-size:14px;
+    max-width:620px;
+    margin:0;
+  }
+
+  .track{display:none;}
+  .track.active{display:block;}
+
+  .phase-block{
+    border:1px solid var(--line);
+    border-radius:14px;
+    background:var(--bg-raised);
+    margin-bottom:18px;
+    overflow:hidden;
+  }
+  .phase-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    padding:16px 20px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .phase-head:hover{background:var(--line-soft);}
+  .phase-head-left{display:flex;align-items:baseline;gap:12px;}
+  .phase-num{font-family:var(--mono);color:var(--text-faint);font-size:12px;}
+  .phase-name{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--text);}
+  .phase-range{font-size:12px;color:var(--text-dim);}
+  .phase-head-right{display:flex;align-items:center;gap:10px;}
+  .phase-progress-text{font-family:var(--mono);font-size:11px;color:var(--text-faint);}
+  .chev{
+    width:16px;height:16px;
+    border-right:1.5px solid var(--text-faint);
+    border-bottom:1.5px solid var(--text-faint);
+    transform:rotate(45deg);
+    transition:transform .2s;
+    flex-shrink:0;
+  }
+  .phase-block.open .chev{transform:rotate(225deg);}
+
+  .phase-body{
+    display:none;
+    padding:0 20px 18px;
+    border-top:1px solid var(--line);
+  }
+  .phase-block.open .phase-body{display:block;}
+
+  .week-group{margin-top:16px;}
+  .week-label{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    margin-bottom:8px;
+  }
+
+  .day-row{
+    border:1px solid var(--line);
+    border-radius:10px;
+    margin-bottom:8px;
+    background:var(--bg);
+    overflow:hidden;
+  }
+  .day-row.done{border-color:#6b908055;}
+  .day-main{
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+    padding:12px 14px;
+  }
+  .day-checkbox{
+    width:20px;height:20px;
+    border-radius:6px;
+    border:1.5px solid var(--text-faint);
+    flex-shrink:0;
+    cursor:pointer;
+    margin-top:1px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:none;
+    padding:0;
+  }
+  .day-checkbox.checked{background:var(--done);border-color:var(--done);}
+  .day-checkbox.checked::after{
+    content:'';
+    width:9px;height:6px;
+    border-left:2px solid #0d1410;
+    border-bottom:2px solid #0d1410;
+    transform:rotate(-45deg) translate(0,-1px);
+  }
+  .day-content{flex:1;min-width:0;}
+  .day-top-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .day-title{font-size:13.5px;font-weight:500;color:var(--text);}
+  .day-row.done .day-title{color:var(--text-dim);text-decoration:line-through;text-decoration-color:var(--text-faint);}
+  .day-tag{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);}
+  .day-desc{font-size:12.5px;color:var(--text-dim);margin-top:4px;line-height:1.55;}
+  .day-link{font-size:11.5px;font-family:var(--mono);margin-top:6px;display:inline-block;word-break:break-all;}
+
+  .day-tools{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;}
+  .icon-btn{
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--text-faint);
+    background:none;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:4px 8px;
+    cursor:pointer;
+  }
+  .icon-btn:hover{color:var(--text);border-color:var(--text-faint);}
+  .icon-btn.has-content{color:var(--doubt);border-color:#e0b04c55;}
+
+  .day-extra{display:none;margin-top:10px;}
+  .day-extra.open{display:block;}
+  .extra-field{margin-bottom:8px;}
+  .extra-label{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;}
+  textarea{
+    width:100%;
+    background:var(--bg-input);
+    border:1px solid var(--line);
+    border-radius:7px;
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:12.5px;
+    padding:9px 10px;
+    resize:vertical;
+    min-height:50px;
+  }
+  textarea::placeholder{color:var(--text-faint);}
+  textarea.doubt{border-color:#e0b04c40;}
+
+  .save-hint{font-size:10.5px;color:var(--text-faint);margin-top:4px;font-family:var(--mono);}
+
+  /* doubts ledger view */
+  .doubt-item{
+    border:1px solid #e0b04c40;
+    background:var(--doubt-dim);
+    border-radius:10px;
+    padding:12px 14px;
+    margin-bottom:10px;
+  }
+  .doubt-meta{font-family:var(--mono);font-size:10.5px;color:var(--doubt);margin-bottom:6px;}
+  .doubt-text{font-size:13px;color:var(--text);white-space:pre-wrap;}
+  .empty-state{
+    text-align:center;
+    padding:60px 20px;
+    color:var(--text-faint);
+    font-size:13px;
+  }
+  .empty-state .big{font-family:var(--mono);font-size:32px;color:var(--text-faint);margin-bottom:10px;}
+
+  .resource-link-block{
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:var(--bg);
+    padding:12px 14px;
+    margin-bottom:8px;
+  }
+  .resource-link-block .name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px;}
+  .resource-link-block .desc{font-size:12px;color:var(--text-dim);margin-bottom:6px;line-height:1.5;}
+  .resource-link-block a{font-family:var(--mono);font-size:11.5px;word-break:break-all;}
+
+  footer{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-faint);
+    text-align:center;
+    padding:30px 20px 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ============ LEFT RAIL ============ -->
+  <aside class="rail">
+    <div class="rail-brand">build log</div>
+    <div class="rail-title">placement tracker</div>
+
+    <div class="ledger">
+      <div class="ledger-row"><span>days complete</span><span id="ledger-days">0 / 0</span></div>
+      <div class="ledger-row"><span>current streak</span><span id="ledger-streak">0</span></div>
+      <div class="ledger-bar-track"><div class="ledger-bar-fill" id="ledger-bar"></div></div>
+      <div class="ledger-pct" id="ledger-pct">0%</div>
+      <div class="ledger-sub" id="ledger-sub">complete</div>
+    </div>
+
+    <div class="nav-section-title">tracks</div>
+    <div class="nav-list" id="track-nav"></div>
+
+    <div class="nav-section-title">views</div>
+    <div class="nav-list">
+      <button class="nav-item" data-view="doubts" onclick="switchView('doubts')">
+        <span>doubts &amp; notes</span><span class="nc" id="doubt-count">0</span>
+      </button>
+      <button class="nav-item" data-view="resources" onclick="switchView('resources')">
+        <span>all resources</span>
+      </button>
+    </div>
+
+    <div class="rail-foot">
+      <button class="reset-btn" onclick="resetAll()">reset all progress</button>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <div class="page-head">
+      <div class="eyebrow" id="head-eyebrow">genai &amp; agentic ai · sql · placement prep</div>
+      <h1 id="head-title">loading…</h1>
+      <p id="head-desc"></p>
+    </div>
+
+    <div id="tracks-container"></div>
+
+    <div class="track" id="view-doubts">
+      <div id="doubts-list"></div>
+    </div>
+
+    <div class="track" id="view-resources">
+      <div id="resources-list"></div>
+    </div>
+  </main>
+</div>
+
+<footer>tick a box, it stays ticked — saved to this browser only (localStorage), nothing leaves your machine</footer>
+
+<script>
+/* ======================================================================
+   DATA — edit this object to change the curriculum. Each track is a
+   top-level key. Each track has phases, each phase has days.
+   ====================================================================== */
+const CURRICULUM = {
+  genai: {
+    label: "genai & agentic ai",
+    eyebrow: "16-week roadmap",
+    title: "GenAI & Agentic AI — placement roadmap",
+    desc: "Zero Python to interview-ready GenAI / Agentic AI engineer. Indian creators, free resources, three portfolio projects.",
+    phases: [
+      {
+        name: "Phase 1 — Python from zero",
+        range: "Weeks 1–2",
+        weeks: [
+          {
+            label: "Week 1 · Days 1–7",
+            days: [
+              {
+                title: "Python fundamentals — full course",
+                tag: "10 hrs",
+                desc: "CodeWithHarry's complete Python tutorial in Hindi. Variables, loops, OOP, file I/O. Pause and code every example.",
+                link: "https://www.youtube.com/watch?v=UrsmFxEIp5k",
+                linkText: "CodeWithHarry — Python Tutorial in Hindi"
+              },
+              {
+                title: "Practice: write 10 small scripts using what you watched",
+                tag: "1 day",
+                desc: "Calculator, to-do list in a dict, simple text file reader. Builds muscle memory before moving on."
+              }
+            ]
+          },
+          {
+            label: "Week 2 · Days 8–14",
+            days: [
+              {
+                title: "100 Days of Python (top 30 days) for OOP depth",
+                tag: "CampusX",
+                desc: "Nitish Singh's day-by-day series. Use for OOP, list comprehensions, decorators — topics CodeWithHarry covers lightly.",
+                link: "https://www.youtube.com/playlist?list=PLKnIA16_RmvZo7fp5kkIth6nRTeQc8s7q",
+                linkText: "CampusX — 100 Days of Python playlist"
+              },
+              {
+                title: "NumPy + Pandas basics",
+                tag: "8 hrs",
+                desc: "Array slicing, dataframe operations, reading CSV/JSON — these show up constantly in AI code.",
+                link: "https://www.youtube.com/@campusx-official/playlists",
+                linkText: "CampusX playlists"
+              },
+              {
+                title: "Mini-project: CLI chatbot in Python",
+                tag: "project",
+                desc: "Input/output loops, functions, dicts. Push to GitHub now — start your portfolio early."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Phase 2 — ML basics + transformers + LLMs",
+        range: "Weeks 3–4",
+        weeks: [
+          {
+            label: "Week 3 · Days 15–21",
+            days: [
+              {
+                title: "100 Days of ML — Days 1–30 only",
+                tag: "CampusX",
+                desc: "Supervised vs unsupervised, train/test split, overfitting, loss functions, gradient descent. Skip algorithm-heavy days (SVM, Random Forest) for now.",
+                link: "https://www.youtube.com/playlist?list=PLKnIA16_Rmvbr7zKYQuBfsVkjoLcJgxHH",
+                linkText: "CampusX — 100 Days of ML playlist"
+              }
+            ]
+          },
+          {
+            label: "Week 4 · Days 22–28",
+            days: [
+              {
+                title: "Deep Learning & NLP crash course",
+                tag: "8 hrs",
+                desc: "Neural networks, backprop, word embeddings, RNNs, attention basics.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — playlists"
+              },
+              {
+                title: "Let's build GPT from scratch — Karpathy",
+                tag: "watch twice",
+                desc: "The single best video to understand transformers internally. Non-negotiable for interview depth.",
+                link: "https://www.youtube.com/watch?v=kCc8FmEb1nY",
+                linkText: "Andrej Karpathy — Let's build GPT"
+              },
+              {
+                title: "How LLMs work + Hugging Face crash course",
+                tag: "4 hrs",
+                desc: "Tokenization, embeddings, inference pipeline. Hands-on with the transformers library.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — LLM & HF videos"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Phase 3 — Prompting, LangChain, RAG",
+        range: "Weeks 5–7",
+        weeks: [
+          {
+            label: "Week 5 · Days 29–35",
+            days: [
+              {
+                title: "Prompt engineering — complete playlist",
+                tag: "5 hrs",
+                desc: "Zero-shot, few-shot, chain-of-thought, ReAct pattern. Build prompts with free-tier APIs.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — prompt engineering"
+              },
+              {
+                title: "Anthropic prompt engineering docs",
+                tag: "2 hr read",
+                desc: "The most practical, current guide on prompting. Keep this as a standing reference.",
+                link: "https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview",
+                linkText: "docs.anthropic.com — prompt engineering"
+              }
+            ]
+          },
+          {
+            label: "Week 6 · Days 36–42",
+            days: [
+              {
+                title: "Generative AI using LangChain — full playlist",
+                tag: "15 hrs",
+                desc: "Architecture, models, prompts, chains, runnables, structured outputs, tool calling. The best Hindi LangChain course available, 2025-updated.",
+                link: "https://www.youtube.com/playlist?list=PLKnIA16_RmvaTbihpo4MtzVm4XOQa0ER0",
+                linkText: "CampusX — Generative AI using LangChain"
+              },
+              {
+                title: "Complete LangChain Course for GenAI",
+                tag: "3 hrs",
+                desc: "Chatbot with LangChain, Groq inference engine, HuggingFace integration.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — LangChain course"
+              }
+            ]
+          },
+          {
+            label: "Week 7 · Days 43–49",
+            days: [
+              {
+                title: "RAG deep dive (CampusX, part of LangChain playlist)",
+                tag: "6 hrs",
+                desc: "Document loaders, text splitters, vector stores, embeddings, retrieval chains. Build a PDF Q&A bot.",
+                link: "https://www.youtube.com/playlist?list=PLKnIA16_RmvaTbihpo4MtzVm4XOQa0ER0",
+                linkText: "CampusX — RAG videos"
+              },
+              {
+                title: "Complete RAG Crash Course with LangChain",
+                tag: "2 hrs",
+                desc: "Chunking, embedding, vector store, retrieval, generation — and why RAG exists.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — RAG crash course"
+              },
+              {
+                title: "Portfolio project 1: PDF Q&A chatbot with RAG",
+                tag: "2-3 days",
+                desc: "Upload a PDF, ask questions, get answers grounded in retrieved context. Deploy on Streamlit Cloud free tier. Your #1 placement project."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Phase 4 — Agentic AI",
+        range: "Weeks 8–10",
+        weeks: [
+          {
+            label: "Week 8 · Days 50–56",
+            days: [
+              {
+                title: "Agentic AI complete playlist",
+                tag: "8 hrs",
+                desc: "What is Agentic AI, the agent loop (Observe→Think→Act), tool calling, memory types.",
+                link: "https://www.krishnaik.in/playlist/PLZoTAELRMXVMBr14UQ30AFlnlQ7eL5wjl",
+                linkText: "Krish Naik — Agentic AI playlist"
+              },
+              {
+                title: "Complete Agentic AI Course (10 hrs)",
+                tag: "10 hrs",
+                desc: "LangChain + LangGraph + RAG + Vectorless RAG + Guardrails + Evals, all in one.",
+                link: "https://www.youtube.com/watch?v=rV3HJ4LEZ7k",
+                linkText: "Krish Naik — Complete Agentic AI Course"
+              }
+            ]
+          },
+          {
+            label: "Week 9 · Days 57–63",
+            days: [
+              {
+                title: "Agentic AI with LangGraph",
+                tag: "6 hrs",
+                desc: "State graphs, nodes, edges, conditional routing, human-in-the-loop, checkpointing. Build a research agent.",
+                link: "https://www.krishnaik.in/playlist/PLZoTAELRMXVPFd7JdvB-rnTb_5V26NYNO",
+                linkText: "Krish Naik — LangGraph playlist"
+              },
+              {
+                title: "Building end-to-end AI Agent in LangChain",
+                tag: "2 hrs",
+                desc: "Nitish Singh builds a complete agent from scratch — excellent practical walkthrough.",
+                link: "https://www.youtube.com/watch?v=gm_lQG8fYjI",
+                linkText: "CampusX — end-to-end AI Agent"
+              }
+            ]
+          },
+          {
+            label: "Week 10 · Days 64–70",
+            days: [
+              {
+                title: "CrewAI multi-agent framework",
+                tag: "4 hrs",
+                desc: "Multiple agents with roles (researcher, writer, coder) that collaborate.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — CrewAI"
+              },
+              {
+                title: "MCP (Model Context Protocol) introduction",
+                tag: "2 hrs",
+                desc: "Anthropic's protocol for connecting agents to tools and data. Knowing MCP in 2025/26 = knowing REST APIs in 2018.",
+                link: "https://github.com/krishnaik06/Roadmap-To-Learn-Agentic-AI",
+                linkText: "Krish Naik — Agentic AI GitHub roadmap"
+              },
+              {
+                title: "Portfolio project 2: multi-agent research assistant",
+                tag: "3 days",
+                desc: "Agent 1: web search → Agent 2: summarizer → Agent 3: report writer. Use CrewAI or LangGraph. Deploy + push to GitHub."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Phase 5 — Fine-tuning, vector DBs, LLMOps",
+        range: "Weeks 11–13",
+        weeks: [
+          {
+            label: "Week 11 · Days 71–77",
+            days: [
+              {
+                title: "Fine-tuning with LoRA & QLoRA",
+                tag: "6 hrs",
+                desc: "When to fine-tune vs RAG. Full fine-tuning vs LoRA vs QLoRA. Hands-on with PEFT + free Colab GPU.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — fine-tuning playlist"
+              }
+            ]
+          },
+          {
+            label: "Week 12 · Days 78–84",
+            days: [
+              {
+                title: "Vector databases (Pinecone, ChromaDB, FAISS, Weaviate)",
+                tag: "4 hrs",
+                desc: "Cosine similarity, ANN indexing, metadata filtering. FAISS (local) vs Pinecone (managed). Classic interview topic.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — vector DB videos"
+              },
+              {
+                title: "Advanced RAG patterns",
+                tag: "4 hrs",
+                desc: "Parent-child chunking, HyDE, hybrid search (BM25 + semantic), re-ranking.",
+                link: "https://www.youtube.com/@campusx-official/playlists",
+                linkText: "CampusX — advanced RAG"
+              }
+            ]
+          },
+          {
+            label: "Week 13 · Days 85–91",
+            days: [
+              {
+                title: "LLM evaluation — RAGAS, LLM-as-judge",
+                tag: "3 hrs",
+                desc: "Faithfulness, answer relevancy, context recall. Shows production thinking, not just demos.",
+                link: "https://www.youtube.com/@krishnaik06/playlists",
+                linkText: "Krish Naik — evaluation videos"
+              },
+              {
+                title: "Portfolio project 3: production-grade RAG app on Streamlit",
+                tag: "3 days",
+                desc: "Chat history, streaming responses, source citations, error handling, RAGAS dashboard. Share the live link in interviews."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Phase 6 — Interview blitz",
+        range: "Weeks 14–16",
+        weeks: [
+          {
+            label: "Week 14 · Days 92–98",
+            days: [
+              {
+                title: "GeeksforGeeks GenAI/LLM interview Q&A bank",
+                tag: "daily 2hr",
+                desc: "100+ questions on transformers, RAG, agents, prompting, fine-tuning, vector DBs, evaluation. Answer every one out loud.",
+                link: "https://www.geeksforgeeks.org/artificial-intelligence/generative-ai-interview-question-with-answer/",
+                linkText: "GeeksforGeeks — GenAI interview Q&A"
+              },
+              {
+                title: "Top 40 GenAI interview questions (2026)",
+                tag: "daily 1hr",
+                desc: "Real questions from senior GenAI/LLM roles. Base vs instruction-tuned, online vs offline eval, LangChain vs LlamaIndex vs LangGraph.",
+                link: "https://towardsai.net/p/machine-learning/40-generative-ai-interview-questions-that-actually-get-asked-in-2026-with-answers",
+                linkText: "Towards AI — 40 GenAI interview Qs"
+              }
+            ]
+          },
+          {
+            label: "Week 15 · Days 99–105",
+            days: [
+              {
+                title: "GenAI system design interview guide",
+                tag: "daily 1.5hr",
+                desc: "Designing a RAG pipeline, multi-agent system, conversational AI product. Practice 45-min answers.",
+                link: "https://igotanoffer.com/en/advice/generative-ai-system-design-interview",
+                linkText: "IGotAnOffer — GenAI system design"
+              },
+              {
+                title: "DSA revision — arrays, hashmaps, strings",
+                tag: "30 min/day",
+                desc: "Two-pointer, sliding window, BFS/DFS, basic DP. GenAI roles still test 1-2 coding problems."
+              }
+            ]
+          },
+          {
+            label: "Week 16 · Days 106–112",
+            days: [
+              {
+                title: "GitHub portfolio: 3 projects live, with README + demo",
+                tag: "polish",
+                desc: "PDF RAG chatbot, multi-agent research assistant, production RAG with eval dashboard. Clean README + demo video + live link for each."
+              },
+              {
+                title: "LinkedIn posts + mock interviews with peers",
+                tag: "polish",
+                desc: "Post a short carousel about each project. Tag the creators you learned from. Run at least 3 mock interviews."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  sql: {
+    label: "sql · leetcode top 50",
+    eyebrow: "10–14 day sprint",
+    title: "SQL — LeetCode Top 50 interview prep",
+    desc: "One course, one practice list. Pattern-blocked practice on the exact LeetCode Top SQL 50 study plan.",
+    phases: [
+      {
+        name: "Step 1 — Learn the language",
+        range: "Days 1–3",
+        weeks: [
+          {
+            label: "Days 1–3",
+            days: [
+              {
+                title: "SQL Tutorial for Beginners — complete course (MySQL)",
+                tag: "4 hrs",
+                desc: "CodeWithHarry's full SQL course in Hindi. Database creation, SELECT/WHERE/ORDER BY, all JOIN types, GROUP BY/HAVING, subqueries, stored procedures, transactions.",
+                link: "https://www.codewithharry.com/blogpost/the-ultimate-sql-course",
+                linkText: "CodeWithHarry — Ultimate SQL Course"
+              },
+              {
+                title: "MySQL Cheatsheet (written reference)",
+                tag: "reference",
+                desc: "Keep open in a tab while solving problems — faster than re-watching video segments for syntax.",
+                link: "https://www.codewithharry.com/blogpost/mysql-cheatsheet",
+                linkText: "CodeWithHarry — MySQL Cheatsheet"
+              },
+              {
+                title: "Window functions in SQL",
+                tag: "1 hr",
+                desc: "RANK, DENSE_RANK, ROW_NUMBER, LAG/LEAD, PARTITION BY. Not covered well by the main course but appears in nearly every LeetCode hard problem — don't skip.",
+                link: "https://www.youtube.com/@GateSmashers",
+                linkText: "Gate Smashers — window functions"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Step 2 — Solve the Top SQL 50, by pattern",
+        range: "Days 4–13",
+        weeks: [
+          {
+            label: "Days 4–5 · JOINs & filtering",
+            days: [
+              {
+                title: "Combine Two Tables, Employees Earning More Than Managers, Customers Who Never Order",
+                tag: "pattern",
+                desc: "Master INNER vs LEFT JOIN and self-joins here before moving on.",
+                link: "https://leetcode.com/studyplan/top-sql-50/",
+                linkText: "LeetCode — Top SQL 50 study plan"
+              }
+            ]
+          },
+          {
+            label: "Days 6–7 · GROUP BY, aggregates, HAVING",
+            days: [
+              {
+                title: "COUNT / SUM / AVG problems",
+                tag: "pattern",
+                desc: "Internalize: WHERE filters before aggregation, HAVING filters after — the #1 mistake under pressure.",
+                link: "https://leetcode.com/studyplan/top-sql-50/",
+                linkText: "LeetCode — Top SQL 50 study plan"
+              }
+            ]
+          },
+          {
+            label: "Days 8–9 · Subqueries & CTEs",
+            days: [
+              {
+                title: "Correlated subqueries and WITH clauses",
+                tag: "pattern",
+                desc: "The hardest concept on the list. Practice writing the same query both ways — some interviewers prefer one form.",
+                link: "https://leetcode.com/studyplan/top-sql-50/",
+                linkText: "LeetCode — Top SQL 50 study plan"
+              }
+            ]
+          },
+          {
+            label: "Days 10–11 · Window functions",
+            days: [
+              {
+                title: "Rank Scores, Department Top Three Salaries, consecutive-numbers problems",
+                tag: "pattern",
+                desc: "This is where most candidates lose marks. Don't rush this block.",
+                link: "https://leetcode.com/studyplan/top-sql-50/",
+                linkText: "LeetCode — Top SQL 50 study plan"
+              }
+            ]
+          },
+          {
+            label: "Days 12–13 · Date/string ops + full re-attempt",
+            days: [
+              {
+                title: "DATEDIFF, DATE_FORMAT, CONCAT, LIKE",
+                tag: "pattern",
+                desc: "Then re-solve 10 random problems from earlier blocks, timed, no notes.",
+                link: "https://leetcode.com/studyplan/top-sql-50/",
+                linkText: "LeetCode — Top SQL 50 study plan"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        name: "Step 3 — Interview-day readiness",
+        range: "Day 14",
+        weeks: [
+          {
+            label: "Day 14",
+            days: [
+              {
+                title: "SQL LeetCode Patterns & Interview Prep Guide",
+                tag: "30 min read",
+                desc: "Pattern-recognition cheat sheet: which of the 5 core constructs to reach for, self-join vs CTE vs subquery under pressure. Read the night before any SQL round.",
+                link: "https://interviewpilot.dev/blog/sql-leetcode",
+                linkText: "InterviewPilot — SQL LeetCode patterns guide"
+              },
+              {
+                title: "HackerRank SQL domain (optional backup)",
+                tag: "optional",
+                desc: "Use only if you finish the Top 50 early. Closer to actual online-assessment format used in placement drives.",
+                link: "https://www.hackerrank.com/domains/sql",
+                linkText: "HackerRank — SQL domain"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+};
+
+/* ======================================================================
+   STATE — localStorage backed
+   ====================================================================== */
+const STORAGE_KEY = "placement_tracker_v1";
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return { done:{}, notes:{}, doubts:{}, lastDate:null, streak:0 };
+}
+function saveState(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+let state = loadState();
+let currentTrack = Object.keys(CURRICULUM)[0];
+let currentView = "track"; // 'track' | 'doubts' | 'resources'
+
+function dayId(trackKey, phaseIdx, weekIdx, dayIdx){
+  return `${trackKey}-p${phaseIdx}-w${weekIdx}-d${dayIdx}`;
+}
+
+/* ======================================================================
+   RENDER
+   ====================================================================== */
+function renderNav(){
+  const nav = document.getElementById("track-nav");
+  nav.innerHTML = "";
+  Object.keys(CURRICULUM).forEach(key => {
+    const track = CURRICULUM[key];
+    const {done,total} = trackProgress(key);
+    const btn = document.createElement("button");
+    btn.className = "nav-item" + (currentTrack===key && currentView==="track" ? " active":"");
+    btn.onclick = () => { currentTrack = key; switchView("track"); };
+    btn.innerHTML = `<span>${track.label}</span><span class="nc">${done}/${total}</span>`;
+    nav.appendChild(btn);
+  });
+}
+
+function trackProgress(key){
+  let total=0, done=0;
+  CURRICULUM[key].phases.forEach((phase,pIdx)=>{
+    phase.weeks.forEach((week,wIdx)=>{
+      week.days.forEach((day,dIdx)=>{
+        total++;
+        if(state.done[dayId(key,pIdx,wIdx,dIdx)]) done++;
+      });
+    });
+  });
+  return {done,total};
+}
+
+function overallProgress(){
+  let total=0, done=0;
+  Object.keys(CURRICULUM).forEach(key=>{
+    const p = trackProgress(key);
+    total += p.total; done += p.done;
+  });
+  return {done,total};
+}
+
+function renderLedger(){
+  const {done,total} = overallProgress();
+  const pct = total ? Math.round((done/total)*100) : 0;
+  document.getElementById("ledger-days").textContent = `${done} / ${total}`;
+  document.getElementById("ledger-pct").textContent = `${pct}%`;
+  document.getElementById("ledger-bar").style.width = pct + "%";
+  document.getElementById("ledger-streak").textContent = state.streak || 0;
+  document.getElementById("ledger-sub").textContent = pct===100 && total>0 ? "all done — go crack it" : "complete";
+}
+
+function countDoubts(){
+  return Object.values(state.doubts).filter(v => v && v.trim().length>0).length;
+}
+
+function renderHead(){
+  if(currentView === "track"){
+    const t = CURRICULUM[currentTrack];
+    document.getElementById("head-eyebrow").textContent = t.eyebrow;
+    document.getElementById("head-title").textContent = t.title;
+    document.getElementById("head-desc").textContent = t.desc;
+  } else if(currentView === "doubts"){
+    document.getElementById("head-eyebrow").textContent = "logged while studying";
+    document.getElementById("head-title").textContent = "Doubts & notes";
+    document.getElementById("head-desc").textContent = "Everything you've flagged as a doubt across both tracks, in one place — review before interviews.";
+  } else if(currentView === "resources"){
+    document.getElementById("head-eyebrow").textContent = "reference";
+    document.getElementById("head-title").textContent = "All resources";
+    document.getElementById("head-desc").textContent = "Every link from both tracks, deduplicated, for quick lookup.";
+  }
+}
+
+function renderTracks(){
+  const container = document.getElementById("tracks-container");
+  container.innerHTML = "";
+
+  const trackDiv = document.createElement("div");
+  trackDiv.className = "track active";
+  trackDiv.id = "view-track";
+
+  const track = CURRICULUM[currentTrack];
+  track.phases.forEach((phase, pIdx) => {
+    const phaseDiv = document.createElement("div");
+    phaseDiv.className = "phase-block";
+    phaseDiv.dataset.phaseKey = `${currentTrack}-${pIdx}`;
+    if(state.notes[`open-${currentTrack}-${pIdx}`]) phaseDiv.classList.add("open");
+
+    let phaseTotal=0, phaseDone=0;
+    phase.weeks.forEach((week,wIdx)=>{
+      week.days.forEach((day,dIdx)=>{
+        phaseTotal++;
+        if(state.done[dayId(currentTrack,pIdx,wIdx,dIdx)]) phaseDone++;
+      });
+    });
+
+    const head = document.createElement("div");
+    head.className = "phase-head";
+    head.innerHTML = `
+      <div class="phase-head-left">
+        <span class="phase-num">${String(pIdx+1).padStart(2,'0')}</span>
+        <span class="phase-name">${phase.name}</span>
+        <span class="phase-range">${phase.range}</span>
+      </div>
+      <div class="phase-head-right">
+        <span class="phase-progress-text">${phaseDone}/${phaseTotal}</span>
+        <span class="chev"></span>
+      </div>`;
+    head.onclick = () => {
+      phaseDiv.classList.toggle("open");
+      state.notes[`open-${currentTrack}-${pIdx}`] = phaseDiv.classList.contains("open");
+      saveState();
+    };
+
+    const body = document.createElement("div");
+    body.className = "phase-body";
+
+    phase.weeks.forEach((week, wIdx) => {
+      const wg = document.createElement("div");
+      wg.className = "week-group";
+      const wl = document.createElement("div");
+      wl.className = "week-label";
+      wl.textContent = week.label;
+      wg.appendChild(wl);
+
+      week.days.forEach((day, dIdx) => {
+        const id = dayId(currentTrack,pIdx,wIdx,dIdx);
+        const isDone = !!state.done[id];
+
+        const row = document.createElement("div");
+        row.className = "day-row" + (isDone ? " done" : "");
+
+        const main = document.createElement("div");
+        main.className = "day-main";
+
+        const cb = document.createElement("button");
+        cb.className = "day-checkbox" + (isDone ? " checked" : "");
+        cb.setAttribute("aria-label", "Mark complete: " + day.title);
+        cb.onclick = () => toggleDone(id, row, cb);
+
+        const content = document.createElement("div");
+        content.className = "day-content";
+
+        const topRow = document.createElement("div");
+        topRow.className = "day-top-row";
+        topRow.innerHTML = `<span class="day-title">${day.title}</span><span class="day-tag">${day.tag||''}</span>`;
+
+        const desc = document.createElement("div");
+        desc.className = "day-desc";
+        desc.textContent = day.desc || "";
+
+        content.appendChild(topRow);
+        content.appendChild(desc);
+
+        if(day.link){
+          const link = document.createElement("a");
+          link.className = "day-link";
+          link.href = day.link;
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.textContent = (day.linkText || day.link) + " ↗";
+          content.appendChild(link);
+        }
+
+        const tools = document.createElement("div");
+        tools.className = "day-tools";
+
+        const noteBtn = document.createElement("button");
+        noteBtn.className = "icon-btn" + (state.notes[id] ? " has-content":"");
+        noteBtn.textContent = "+ note";
+
+        const doubtBtn = document.createElement("button");
+        doubtBtn.className = "icon-btn" + (state.doubts[id] ? " has-content":"");
+        doubtBtn.textContent = "+ doubt";
+
+        tools.appendChild(noteBtn);
+        tools.appendChild(doubtBtn);
+        content.appendChild(tools);
+
+        const extra = document.createElement("div");
+        extra.className = "day-extra";
+
+        const noteField = document.createElement("div");
+        noteField.className = "extra-field";
+        noteField.innerHTML = `<span class="extra-label">your note</span>`;
+        const noteArea = document.createElement("textarea");
+        noteArea.placeholder = "What clicked? What to revisit?";
+        noteArea.value = state.notes[id] || "";
+        noteArea.oninput = () => {
+          state.notes[id] = noteArea.value;
+          saveState();
+          noteBtn.classList.toggle("has-content", noteArea.value.trim().length>0);
+        };
+        noteField.appendChild(noteArea);
+
+        const doubtField = document.createElement("div");
+        doubtField.className = "extra-field";
+        doubtField.innerHTML = `<span class="extra-label">doubt to resolve</span>`;
+        const doubtArea = document.createElement("textarea");
+        doubtArea.className = "doubt";
+        doubtArea.placeholder = "What's unclear? Paste it into Claude later for a full explanation.";
+        doubtArea.value = state.doubts[id] || "";
+        doubtArea.oninput = () => {
+          state.doubts[id] = doubtArea.value;
+          saveState();
+          doubtBtn.classList.toggle("has-content", doubtArea.value.trim().length>0);
+          renderDoubtCount();
+        };
+        doubtField.appendChild(doubtArea);
+
+        noteBtn.onclick = () => toggleExtra(extra, noteArea);
+        doubtBtn.onclick = () => toggleExtra(extra, doubtArea);
+
+        extra.appendChild(noteField);
+        extra.appendChild(doubtField);
+
+        main.appendChild(cb);
+        main.appendChild(content);
+        row.appendChild(main);
+        row.appendChild(extra);
+
+        // wrap extra in padding container matching main's offset
+        extra.style.padding = "0 14px 12px 46px";
+
+        wg.appendChild(row);
+      });
+
+      body.appendChild(wg);
+    });
+
+    phaseDiv.appendChild(head);
+    phaseDiv.appendChild(body);
+    trackDiv.appendChild(phaseDiv);
+  });
+
+  container.appendChild(trackDiv);
+}
+
+function toggleExtra(extraEl, focusTextarea){
+  extraEl.classList.toggle("open");
+  if(extraEl.classList.contains("open") && focusTextarea){
+    setTimeout(()=> focusTextarea.focus(), 50);
+  }
+}
+
+function toggleDone(id, rowEl, cbEl){
+  const wasDone = !!state.done[id];
+  state.done[id] = !wasDone;
+  if(!wasDone) bumpStreak();
+  saveState();
+  rowEl.classList.toggle("done", state.done[id]);
+  cbEl.classList.toggle("checked", state.done[id]);
+  renderLedger();
+  renderNav();
+}
+
+function bumpStreak(){
+  const today = new Date().toDateString();
+  if(state.lastDate === today) return; // already counted today
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+  if(state.lastDate === yesterday){
+    state.streak = (state.streak||0) + 1;
+  } else {
+    state.streak = 1;
+  }
+  state.lastDate = today;
+}
+
+function renderDoubtCount(){
+  document.getElementById("doubt-count").textContent = countDoubts();
+}
+
+function renderDoubtsView(){
+  const list = document.getElementById("doubts-list");
+  list.innerHTML = "";
+  let any = false;
+
+  Object.keys(CURRICULUM).forEach(trackKey=>{
+    CURRICULUM[trackKey].phases.forEach((phase,pIdx)=>{
+      phase.weeks.forEach((week,wIdx)=>{
+        week.days.forEach((day,dIdx)=>{
+          const id = dayId(trackKey,pIdx,wIdx,dIdx);
+          const doubtText = state.doubts[id];
+          if(doubtText && doubtText.trim().length>0){
+            any = true;
+            const item = document.createElement("div");
+            item.className = "doubt-item";
+
+            const meta = document.createElement("div");
+            meta.className = "doubt-meta";
+            meta.textContent = `${CURRICULUM[trackKey].label} · ${day.title}`;
+
+            const textEl = document.createElement("div");
+            textEl.className = "doubt-text";
+            textEl.textContent = doubtText;
+
+            item.appendChild(meta);
+            item.appendChild(textEl);
+            list.appendChild(item);
+          }
+        });
+      });
+    });
+  });
+
+  if(!any){
+    list.innerHTML = `<div class="empty-state"><div class="big">∅</div>no doubts logged yet — click "+ doubt" on any day to flag something unclear</div>`;
+  }
+}
+
+function renderResourcesView(){
+  const list = document.getElementById("resources-list");
+  list.innerHTML = "";
+  const seen = new Set();
+
+  Object.keys(CURRICULUM).forEach(trackKey=>{
+    CURRICULUM[trackKey].phases.forEach(phase=>{
+      phase.weeks.forEach(week=>{
+        week.days.forEach(day=>{
+          if(day.link && !seen.has(day.link)){
+            seen.add(day.link);
+            const block = document.createElement("div");
+            block.className = "resource-link-block";
+            block.innerHTML = `
+              <div class="name">${day.linkText || day.title}</div>
+              <div class="desc">${day.desc || ""}</div>
+              <a href="${day.link}" target="_blank" rel="noopener">${day.link} ↗</a>`;
+            list.appendChild(block);
+          }
+        });
+      });
+    });
+  });
+}
+
+function switchView(view){
+  currentView = view;
+  document.getElementById("view-doubts").classList.remove("active");
+  document.getElementById("view-resources").classList.remove("active");
+  document.querySelectorAll(".nav-item[data-view]").forEach(el=>{
+    el.classList.toggle("active", el.dataset.view === view);
+  });
+
+  if(view === "track"){
+    renderTracks();
+  } else if(view === "doubts"){
+    document.getElementById("tracks-container").innerHTML = "";
+    document.getElementById("view-doubts").classList.add("active");
+    renderDoubtsView();
+  } else if(view === "resources"){
+    document.getElementById("tracks-container").innerHTML = "";
+    document.getElementById("view-resources").classList.add("active");
+    renderResourcesView();
+  }
+  renderHead();
+  renderNav();
+}
+
+function resetAll(){
+  if(!confirm("This clears all ticks, notes, and doubts on this device. This can't be undone. Continue?")) return;
+  state = { done:{}, notes:{}, doubts:{}, lastDate:null, streak:0 };
+  saveState();
+  switchView(currentView);
+  renderLedger();
+  renderDoubtCount();
+}
+
+/* expand first phase by default on first load */
+function init(){
+  const firstKey = Object.keys(CURRICULUM)[0];
+  if(state.notes[`open-${firstKey}-0`] === undefined){
+    state.notes[`open-${firstKey}-0`] = true;
+  }
+  switchView("track");
+  renderLedger();
+  renderDoubtCount();
+}
+
+init();
+</script>
+</body>
+</html>
